@@ -50,20 +50,21 @@ AI CLI に以下のプロンプトを貼ってください：
 
 **Gemini CLI**
 ```bash
-gemini -p "https://github.com/harunamitrader/cli-prompt-cron をクローンして、npm install して、skills/SKILL.md を読んで"
+gemini -p "https://github.com/harunamitrader/cli-prompt-cron をクローンして、npm install して"
 ```
 
 **Codex**
 ```bash
-codex "https://github.com/harunamitrader/cli-prompt-cron をクローンして、npm install して、skills/SKILL.md を読んで"
+codex "https://github.com/harunamitrader/cli-prompt-cron をクローンして、npm install して"
 ```
 
 **Claude Code**
 ```bash
-claude -p "https://github.com/harunamitrader/cli-prompt-cron をクローンして、npm install して、skills/SKILL.md を読んで"
+claude -p "https://github.com/harunamitrader/cli-prompt-cron をクローンして、npm install して"
 ```
 
-AI が自動でクローン → インストール → スキル読み込みを行います。
+AI が自動でクローン → インストールを行います。
+SKILL.md の読み込みは Step 2 のジョブ管理時に毎回行います。
 
 ---
 
