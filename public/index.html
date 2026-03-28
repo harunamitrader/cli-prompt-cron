@@ -570,10 +570,10 @@
     }
     scroll.innerHTML = jobs.map(job => {
       const active = job.active !== false;
-      const running = job.running === true;
+      const running = job.running || 0;
       let badge;
-      if (running) {
-        badge = '<span class="status-badge running-badge">実行中</span>';
+      if (running > 0) {
+        badge = `<span class="status-badge running-badge">実行中${running > 1 ? ' x' + running : ''}</span>`;
       } else if (active) {
         badge = '<span class="status-badge status-active">稼働中</span>';
       } else {
@@ -585,7 +585,7 @@
       const nextLabel = rel ? `<strong>次回:</strong> ${esc(rel)}` : (next ? `<strong>次回:</strong> ${fmt(next)}` : '');
       const btnClass = active ? 'stop' : 'resume';
       const btnLabel = active ? '停止' : '再開';
-      const killBtn = running ? `<button class="kill-btn" data-job="${esc(job.name)}">強制停止</button>` : '';
+      const killBtn = running > 0 ? `<button class="kill-btn" data-job="${esc(job.name)}">強制停止${running > 1 ? ' (' + running + ')' : ''}</button>` : '';
       const cmd = job.command || '';
       const parsed = parseCommand(cmd);
       return `<div class="job-card">

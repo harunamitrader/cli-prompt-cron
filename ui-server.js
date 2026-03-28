@@ -117,15 +117,16 @@ function handleJobs(res) {
     try {
       const raw = readFileSync(filePath, 'utf8');
       const job = JSON.parse(raw);
-      // Check if a process is currently running
-      let running = false;
+      // Check if any processes are currently running
+      let running = 0;
       try {
         const pidPath = join(PIDS_DIR, `${name}.json`);
         if (existsSync(pidPath)) {
-          const pidInfo = JSON.parse(readFileSync(pidPath, 'utf8'));
-          // Verify process is still alive
-          process.kill(pidInfo.pid, 0);
-          running = true;
+          const pids = JSON.parse(readFileSync(pidPath, 'utf8'));
+          const arr = Array.isArray(pids) ? pids : [pids];
+          for (const p of arr) {
+            try { process.kill(p.pid, 0); running++; } catch { /* dead */ }
+          }
         }
       } catch { /* not running */ }
       return {
@@ -234,7 +235,7 @@ function handleToggleJob(req, res, jobName) {
   }
 }
 
-/** DELETE /api/running/:name — kill a running process */
+/** DELETE /api/running/:name — kill all running processes for a job */
 function handleKillProcess(res, jobName) {
   if (jobName.includes('..') || jobName.includes('/') || jobName.includes('\\')) {
     sendJSON(res, 400, { error: 'invalid job name' });
@@ -243,23 +244,28 @@ function handleKillProcess(res, jobName) {
 
   const pidPath = join(PIDS_DIR, `${jobName}.json`);
   try {
-    const pidInfo = JSON.parse(readFileSync(pidPath, 'utf8'));
-    process.kill(pidInfo.pid, 'SIGTERM');
-    // Give it a moment, then force kill if still alive
-    setTimeout(() => {
+    const raw = JSON.parse(readFileSync(pidPath, 'utf8'));
+    const pids = Array.isArray(raw) ? raw : [raw];
+    const killed = [];
+    for (const p of pids) {
       try {
-        process.kill(pidInfo.pid, 0); // check if alive
-        process.kill(pidInfo.pid, 'SIGKILL');
+        process.kill(p.pid, 'SIGTERM');
+        killed.push(p.pid);
       } catch { /* already dead */ }
+    }
+    // Force kill survivors after 3 seconds
+    setTimeout(() => {
+      for (const pid of killed) {
+        try {
+          process.kill(pid, 0);
+          process.kill(pid, 'SIGKILL');
+        } catch { /* already dead */ }
+      }
     }, 3000);
-    sendJSON(res, 200, { name: jobName, killed: true, pid: pidInfo.pid });
+    sendJSON(res, 200, { name: jobName, killed: true, pids: killed, count: killed.length });
   } catch (err) {
     if (err.code === 'ENOENT') {
       sendJSON(res, 404, { error: 'no running process for this job' });
-    } else if (err.code === 'ESRCH') {
-      // Process already dead, clean up stale PID file
-      try { fs.unlinkSync(pidPath); } catch { /* ignore */ }
-      sendJSON(res, 404, { error: 'process already exited' });
     } else {
       sendJSON(res, 500, { error: 'failed to kill process' });
     }

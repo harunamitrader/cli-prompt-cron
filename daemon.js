@@ -85,14 +85,15 @@ function runCommand(jobName, command) {
     windowsHide: true,
   });
 
-  // Write PID file so ui-server can kill the process
+  // Write PID to pid file (array of running processes)
   const pidFile = join(PIDS_DIR, `${jobName}.json`);
+  const pidEntry = { pid: child.pid, command, startedAt: new Date().toISOString() };
   try {
-    writeFileSync(pidFile, JSON.stringify({
-      pid: child.pid,
-      command,
-      startedAt: new Date().toISOString(),
-    }) + '\n', 'utf8');
+    let pids = [];
+    try { pids = JSON.parse(readFileSync(pidFile, 'utf8')); } catch { /* new file */ }
+    if (!Array.isArray(pids)) pids = [];
+    pids.push(pidEntry);
+    writeFileSync(pidFile, JSON.stringify(pids) + '\n', 'utf8');
   } catch { /* best-effort */ }
 
   /** @type {string[]} */
@@ -120,8 +121,20 @@ function runCommand(jobName, command) {
   child.on('close', (code) => {
     log(jobName, `EXIT code=${code ?? '?'}`);
 
-    // Remove PID file
-    try { unlinkSync(pidFile); } catch { /* ignore */ }
+    // Remove this PID from pid file
+    try {
+      let pids = JSON.parse(readFileSync(pidFile, 'utf8'));
+      if (Array.isArray(pids)) {
+        pids = pids.filter(p => p.pid !== child.pid);
+        if (pids.length > 0) {
+          writeFileSync(pidFile, JSON.stringify(pids) + '\n', 'utf8');
+        } else {
+          unlinkSync(pidFile);
+        }
+      } else {
+        unlinkSync(pidFile);
+      }
+    } catch { /* ignore */ }
 
     // Save collected stdout to a result file
     try {
