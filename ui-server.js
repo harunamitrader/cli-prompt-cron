@@ -1,5 +1,5 @@
 /**
- * cli-prompt-cron-ui — lightweight dashboard HTTP server
+ * cli-prompt-cron — lightweight dashboard HTTP server
  *
  * No npm dependencies — uses Node.js built-ins only.
  * Port: process.env.PORT or 3300
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 
 // ── Paths ────────────────────────────────────────────────────────────────────
 
-const BASE_DIR    = join(homedir(), '.cli-prompt-cron-ui');
+const BASE_DIR    = join(homedir(), '.cli-prompt-cron');
 const JOBS_DIR    = join(BASE_DIR, 'jobs');
 const LOGS_DIR    = join(BASE_DIR, 'logs');
 const RESULTS_DIR = join(BASE_DIR, 'results');
@@ -368,7 +368,7 @@ function router(req, res) {
 const server = http.createServer(router);
 
 server.listen(PORT, () => {
-  console.log(`[ui-server] cli-prompt-cron-ui dashboard running → http://localhost:${PORT}`);
+  console.log(`[ui-server] cli-prompt-cron dashboard running → http://localhost:${PORT}`);
   console.log(`[ui-server] Jobs dir    : ${JOBS_DIR}`);
   console.log(`[ui-server] Logs dir    : ${LOGS_DIR}`);
   console.log(`[ui-server] Results dir : ${RESULTS_DIR}`);

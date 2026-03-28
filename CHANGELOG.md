@@ -21,8 +21,8 @@
 - File-based cron daemon for AI CLIs (Claude Code, Gemini CLI, Codex)
 - Browser dashboard at `http://localhost:3300` (vanilla HTML/CSS/JS, no build step)
 - Real-time log streaming via Server-Sent Events (SSE)
-- Execution results saved per-job to `~/.cli-prompt-cron-ui/results/`
-- Job management via `~/.cli-prompt-cron-ui/jobs/*.json`
+- Execution results saved per-job to `~/.cli-prompt-cron/results/`
+- Job management via `~/.cli-prompt-cron/jobs/*.json`
 - Hot-reload with Chokidar (add / edit / delete jobs without restarting daemon)
 - `start.js`: one-command launch — daemon + UI server + auto browser open
 - Per-job timezone support

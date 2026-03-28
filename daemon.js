@@ -1,11 +1,11 @@
 /**
- * cli-prompt-cron-ui daemon
+ * cli-prompt-cron daemon
  * Lightweight cron scheduler for AI CLI tools (Claude Code, Gemini CLI, Codex)
  *
- * Watches ~/.cli-prompt-cron-ui/jobs/*.json with Chokidar for hot-reload.
+ * Watches ~/.cli-prompt-cron/jobs/*.json with Chokidar for hot-reload.
  * Runs commands via shell when cron fires.
- * Logs output to ~/.cli-prompt-cron-ui/logs/YYYY-MM-DD.log
- * Saves execution results to ~/.cli-prompt-cron-ui/results/<jobName>-<timestamp>.txt
+ * Logs output to ~/.cli-prompt-cron/logs/YYYY-MM-DD.log
+ * Saves execution results to ~/.cli-prompt-cron/results/<jobName>-<timestamp>.txt
  */
 
 import { watch } from 'chokidar';
@@ -24,7 +24,7 @@ import { homedir } from 'node:os';
 
 // ── Paths ────────────────────────────────────────────────────────────────────
 
-const BASE_DIR    = join(homedir(), '.cli-prompt-cron-ui');
+const BASE_DIR    = join(homedir(), '.cli-prompt-cron');
 const JOBS_DIR    = join(BASE_DIR, 'jobs');
 const LOGS_DIR    = join(BASE_DIR, 'logs');
 const RESULTS_DIR = join(BASE_DIR, 'results');
@@ -312,7 +312,7 @@ process.on('uncaughtException', (err) => {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 log('daemon', '─────────────────────────────────────────');
-log('daemon', 'cli-prompt-cron-ui daemon starting');
+log('daemon', 'cli-prompt-cron daemon starting');
 log('daemon', `Jobs dir    : ${JOBS_DIR}`);
 log('daemon', `Logs dir    : ${LOGS_DIR}`);
 log('daemon', `Results dir : ${RESULTS_DIR}`);
