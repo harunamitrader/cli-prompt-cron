@@ -140,6 +140,40 @@
     }
     .job-card-next strong { color: #7F8C8D; font-weight: 500; }
 
+    .job-card-actions {
+      margin-top: 10px;
+    }
+    .toggle-btn {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+    }
+    .toggle-btn.stop {
+      background: #FADBD8;
+      color: #C0392B;
+    }
+    .toggle-btn.stop:hover {
+      background: #F1948A;
+      color: #fff;
+    }
+    .toggle-btn.resume {
+      background: #D5F0E0;
+      color: #1E8449;
+    }
+    .toggle-btn.resume:hover {
+      background: #82E0AA;
+      color: #fff;
+    }
+    .toggle-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     .no-jobs-card {
       padding: 16px;
       color: #BDC3C7;
@@ -493,16 +527,36 @@
         ? '<span class="status-badge status-active">稼働中</span>'
         : '<span class="status-badge status-inactive">停止中</span>';
       const schedule = humanizeCron(job.cron || '');
-      const next = nextCronFire(job.cron || '');
+      const next = active ? nextCronFire(job.cron || '') : null;
       const rel = next ? relativeTime(next) : null;
       const nextLabel = rel ? `<strong>次回:</strong> ${esc(rel)}` : (next ? `<strong>次回:</strong> ${fmt(next)}` : '');
+      const btnClass = active ? 'stop' : 'resume';
+      const btnLabel = active ? '停止' : '再開';
       return `<div class="job-card">
         <div class="job-card-top">${badge}</div>
         <div class="job-card-name" title="${esc(job.name || job.id || '—')}">${esc(job.name || job.id || '—')}</div>
         <div class="job-card-schedule">${esc(schedule)}</div>
         ${nextLabel ? `<div class="job-card-next">${nextLabel}</div>` : ''}
+        <div class="job-card-actions">
+          <button class="toggle-btn ${btnClass}" data-job="${esc(job.name)}">${btnLabel}</button>
+        </div>
       </div>`;
     }).join('');
+
+    scroll.querySelectorAll('.toggle-btn').forEach(btn => {
+      btn.addEventListener('click', () => toggleJob(btn.dataset.job, btn));
+    });
+  }
+
+  async function toggleJob(name, btn) {
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/jobs/' + encodeURIComponent(name), { method: 'PATCH' });
+      if (res.ok) {
+        await fetchJobs();
+      }
+    } catch (_) {}
+    btn.disabled = false;
   }
 
   async function fetchJobs() {

@@ -14,7 +14,7 @@
 
 import http from 'node:http';
 import fs, { watchFile, unwatchFile } from 'node:fs';
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, statSync, writeFileSync } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -198,6 +198,29 @@ function handleResultFile(res, filename) {
   }
 }
 
+/** PATCH /api/jobs/:name — toggle active field */
+function handleToggleJob(req, res, jobName) {
+  if (jobName.includes('..') || jobName.includes('/') || jobName.includes('\\')) {
+    sendJSON(res, 400, { error: 'invalid job name' });
+    return;
+  }
+
+  const filePath = join(JOBS_DIR, `${jobName}.json`);
+  try {
+    const raw = readFileSync(filePath, 'utf8');
+    const job = JSON.parse(raw);
+    job.active = job.active === false ? true : false;
+    writeFileSync(filePath, JSON.stringify(job, null, 2) + '\n', 'utf8');
+    sendJSON(res, 200, { name: jobName, active: job.active });
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      sendJSON(res, 404, { error: 'job not found' });
+    } else {
+      sendJSON(res, 500, { error: 'failed to update job' });
+    }
+  }
+}
+
 // ── SSE log streaming ─────────────────────────────────────────────────────────
 
 /**
@@ -316,10 +339,24 @@ function router(req, res) {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin':  '*',
-      'Access-Control-Allow-Methods': 'GET, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     });
     res.end();
+    return;
+  }
+
+  const url      = new URL(req.url, `http://localhost:${PORT}`);
+  const pathname = url.pathname;
+
+  // PATCH /api/jobs/:name — toggle active
+  if (req.method === 'PATCH') {
+    const jobMatch = pathname.match(/^\/api\/jobs\/(.+)$/);
+    if (jobMatch) {
+      handleToggleJob(req, res, decodeURIComponent(jobMatch[1]));
+      return;
+    }
+    sendJSON(res, 404, { error: 'not found' });
     return;
   }
 
@@ -327,9 +364,6 @@ function router(req, res) {
     sendJSON(res, 405, { error: 'method not allowed' });
     return;
   }
-
-  const url      = new URL(req.url, `http://localhost:${PORT}`);
-  const pathname = url.pathname;
 
   if (pathname === '/' || pathname === '/index.html') {
     handleIndex(res);
