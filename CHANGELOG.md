@@ -2,6 +2,21 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-03-29
+
+### Added
+- **デスクトップショートカット自動作成**: `npm install` 時にアイコン付きショートカットをデスクトップに自動生成（Windows / Mac / Linux 対応）
+- **ヘッダー画像・アイコン**: `assets/header.jpg`（リポジトリバナー）、`assets/icon.jpg`（アプリアイコン）を追加
+- **create-shortcut.bat**: Windows 向け手動ショートカット作成スクリプト
+- **scripts/create-shortcut.js**: クロスプラットフォーム対応のショートカット作成スクリプト（postinstall で自動実行）
+
+### Fixed
+- **ICO 変換**: `ImageFormat::Icon` が 0 バイトファイルを生成する問題を修正。PNG-in-ICO コンテナ形式で正しく変換
+- **ブラウザ起動**: `cmd /c start` が launch.bat と競合する問題を修正。`explorer` に変更
+- **ui-server.js 起動エラー**: `__dirname` の定義順序が壊れていた問題を修正
+- **package.json 消失**: リネーム時の `git add -A` で削除されていたのを復元
+- **launch.bat**: Node.js 存在チェック追加、日本語メッセージの文字化け防止（ASCII のみに変更）、エラー時 pause 追加
+
 ## [1.1.0] - 2026-03-28
 
 ### Changed
