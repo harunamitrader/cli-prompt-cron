@@ -1,0 +1,21 @@
+{
+  "name": "cli-prompt-cron",
+  "version": "1.1.0",
+  "description": "AI CLI cron daemon with browser dashboard — schedule prompts for Gemini CLI, Codex, Claude Code",
+  "type": "module",
+  "main": "start.js",
+  "scripts": {
+    "start": "node start.js",
+    "daemon": "node daemon.js",
+    "ui": "node ui-server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "node-cron": "^3.0.3"
+  },
+  "keywords": ["cron", "ai", "gemini", "codex", "claude", "cli", "automation", "dashboard"],
+  "license": "MIT"
+}
