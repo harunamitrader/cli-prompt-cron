@@ -143,6 +143,14 @@
       text-overflow: ellipsis;
       line-height: 1.4;
     }
+    .job-card-flags {
+      font-size: 10px;
+      color: #7F8C8D;
+      margin-bottom: 4px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
     .job-card-next {
       font-size: 11px;
       color: #95A5A6;
@@ -539,6 +547,22 @@
     } catch (e) { return null; }
   }
 
+  /* ── Parse command into CLI, flags, prompt ── */
+  function parseCommand(cmd) {
+    if (!cmd) return { prompt: '', flags: '' };
+    // Extract the prompt (last quoted string)
+    const promptMatch = cmd.match(/['"]([^'"]+)['"]\s*$/);
+    const prompt = promptMatch ? promptMatch[1] : cmd;
+    // Extract flags (--xxx parts)
+    const flagParts = cmd.match(/--[\w-]+(?:\s+'[^']*'|\s+"[^"]*"|\s+\S+)?/g) || [];
+    // Filter out flags that are part of the prompt argument
+    const flags = flagParts.filter(f => !f.match(/^-p\b/)).join(' ');
+    // Extract CLI name
+    const cliMatch = cmd.match(/^(\S+)/);
+    const cli = cliMatch ? cliMatch[1] : '';
+    return { cli, prompt, flags };
+  }
+
   /* ── Jobs ── */
   function renderJobs(jobs) {
     const scroll = document.getElementById('jobs-scroll');
@@ -565,11 +589,13 @@
       const btnLabel = active ? '停止' : '再開';
       const killBtn = running ? `<button class="kill-btn" data-job="${esc(job.name)}">強制停止</button>` : '';
       const cmd = job.command || '';
+      const parsed = parseCommand(cmd);
       return `<div class="job-card">
         <div class="job-card-top">${badge}</div>
         <div class="job-card-name" title="${esc(job.name || job.id || '—')}">${esc(job.name || job.id || '—')}</div>
         <div class="job-card-schedule">${esc(schedule)}</div>
-        ${cmd ? `<div class="job-card-command" title="${esc(cmd)}">${esc(cmd)}</div>` : ''}
+        ${parsed.prompt ? `<div class="job-card-command" title="${esc(parsed.prompt)}">${esc(parsed.prompt)}</div>` : ''}
+        ${parsed.flags ? `<div class="job-card-flags" title="${esc(parsed.flags)}">${esc(parsed.flags)}</div>` : ''}
         ${nextLabel ? `<div class="job-card-next">${nextLabel}</div>` : ''}
         <div class="job-card-actions">
           <button class="toggle-btn ${btnClass}" data-job="${esc(job.name)}">${btnLabel}</button>${killBtn}
