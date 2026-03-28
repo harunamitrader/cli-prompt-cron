@@ -20,12 +20,11 @@ import { fileURLToPath } from 'node:url';
 
 // ── Paths ────────────────────────────────────────────────────────────────────
 
+const __dirname   = dirname(fileURLToPath(import.meta.url));
 const BASE_DIR    = join(__dirname, 'data');
 const JOBS_DIR    = join(BASE_DIR, 'jobs');
 const LOGS_DIR    = join(BASE_DIR, 'logs');
 const RESULTS_DIR = join(BASE_DIR, 'results');
-
-const __dirname   = dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR  = join(__dirname, 'public');
 
 const PORT = Number(process.env.PORT) || 3300;
