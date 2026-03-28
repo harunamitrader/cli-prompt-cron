@@ -61,8 +61,8 @@ function openBrowser(url) {
   let cmd, args;
 
   if (platform === 'win32') {
-    cmd  = 'cmd';
-    args = ['/c', 'start', url];
+    cmd  = 'explorer';
+    args = [url];
   } else if (platform === 'darwin') {
     cmd  = 'open';
     args = [url];

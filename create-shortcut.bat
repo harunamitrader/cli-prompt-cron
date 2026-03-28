@@ -8,15 +8,28 @@ set DESKTOP=%USERPROFILE%\Desktop
 set ICON_JPG=%SCRIPT_DIR%assets\icon.jpg
 set ICON_ICO=%SCRIPT_DIR%assets\icon.ico
 
-:: Convert jpg to ico via PowerShell (if ico doesn't exist yet)
+:: Convert jpg to ico via PowerShell (PNG-in-ICO method)
 if not exist "%ICON_ICO%" (
     powershell -NoProfile -Command ^
       "Add-Type -AssemblyName System.Drawing;" ^
       "$img = [System.Drawing.Image]::FromFile('%ICON_JPG%');" ^
       "$bmp = New-Object System.Drawing.Bitmap($img, 256, 256);" ^
-      "$stream = [System.IO.File]::Create('%ICON_ICO%');" ^
-      "$bmp.Save($stream, [System.Drawing.Imaging.ImageFormat]::Icon);" ^
-      "$stream.Close(); $bmp.Dispose(); $img.Dispose();" ^
+      "$png = '%ICON_ICO:.ico=.png%';" ^
+      "$bmp.Save($png, [System.Drawing.Imaging.ImageFormat]::Png);" ^
+      "$bmp.Dispose(); $img.Dispose();" ^
+      "$pngData = [System.IO.File]::ReadAllBytes($png);" ^
+      "$ico = New-Object byte[] (22 + $pngData.Length);" ^
+      "[System.BitConverter]::GetBytes([uint16]0).CopyTo($ico, 0);" ^
+      "[System.BitConverter]::GetBytes([uint16]1).CopyTo($ico, 2);" ^
+      "[System.BitConverter]::GetBytes([uint16]1).CopyTo($ico, 4);" ^
+      "$ico[6]=0; $ico[7]=0; $ico[8]=0; $ico[9]=0;" ^
+      "[System.BitConverter]::GetBytes([uint16]1).CopyTo($ico, 10);" ^
+      "[System.BitConverter]::GetBytes([uint16]32).CopyTo($ico, 12);" ^
+      "[System.BitConverter]::GetBytes([uint32]$pngData.Length).CopyTo($ico, 14);" ^
+      "[System.BitConverter]::GetBytes([uint32]22).CopyTo($ico, 18);" ^
+      "[System.Array]::Copy($pngData, 0, $ico, 22, $pngData.Length);" ^
+      "[System.IO.File]::WriteAllBytes('%ICON_ICO%', $ico);" ^
+      "Remove-Item $png -ErrorAction SilentlyContinue;" ^
       "Write-Host '[cli-prompt-cron] Icon converted.'"
 )
 
