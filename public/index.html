@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>cli-cron-ui</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1a1a1a;
+      color: #e0e0e0;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 13px;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      padding: 10px 16px;
+      background: #111;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      flex-shrink: 0;
+    }
+    header h1 {
+      font-size: 16px;
+      font-weight: bold;
+      color: #7dd3fc;
+      letter-spacing: 0.05em;
+    }
+    header span {
+      font-size: 11px;
+      color: #666;
+    }
+
+    /* ── Main layout ── */
+    main {
+      display: grid;
+      grid-template-rows: auto 1fr;
+      grid-template-columns: 1fr;
+      flex: 1;
+      overflow: hidden;
+      gap: 0;
+    }
+
+    /* ── Section base ── */
+    .section {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .section-header {
+      padding: 5px 12px;
+      background: #222;
+      border-bottom: 1px solid #333;
+      font-size: 10px;
+      font-weight: bold;
+      color: #888;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+
+    /* ── Jobs section ── */
+    #jobs-section {
+      border-bottom: 1px solid #333;
+      flex-shrink: 0;
+      max-height: 240px;
+    }
+    #jobs-container {
+      overflow-y: auto;
+      padding: 8px 12px;
+    }
+    #jobs-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    #jobs-table th {
+      text-align: left;
+      padding: 4px 8px;
+      font-size: 10px;
+      color: #666;
+      border-bottom: 1px solid #2a2a2a;
+      white-space: nowrap;
+    }
+    #jobs-table td {
+      padding: 5px 8px;
+      border-bottom: 1px solid #222;
+      vertical-align: middle;
+      white-space: nowrap;
+    }
+    #jobs-table tr:last-child td { border-bottom: none; }
+    #jobs-table tr:hover td { background: #222; }
+
+    .dot {
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      flex-shrink: 0;
+    }
+    .dot-active   { background: #4ade80; box-shadow: 0 0 4px #4ade8088; }
+    .dot-inactive { background: #555; }
+
+    .job-name  { color: #e0e0e0; }
+    .job-cron  { color: #a78bfa; font-size: 12px; }
+    .job-next  { color: #7dd3fc; font-size: 11px; }
+    .job-last  { color: #888; font-size: 11px; }
+
+    .no-jobs {
+      padding: 12px;
+      color: #555;
+      font-size: 12px;
+    }
+
+    /* ── Bottom split ── */
+    #bottom {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      overflow: hidden;
+      flex: 1;
+    }
+
+    /* ── Live Log ── */
+    #log-section {
+      border-right: 1px solid #333;
+    }
+    #log-pane {
+      flex: 1;
+      overflow-y: auto;
+      padding: 6px 10px;
+      background: #111;
+      line-height: 1.6;
+    }
+    .log-line {
+      white-space: pre-wrap;
+      word-break: break-all;
+      font-size: 12px;
+    }
+    .log-fire   { color: #fbbf24; }
+    .log-exit   { color: #6b7280; }
+    .log-stdout { color: #e0e0e0; }
+    .log-stderr { color: #f87171; }
+    .log-daemon { color: #67e8f9; }
+
+    /* ── Results ── */
+    #results-section {}
+    #results-list {
+      overflow-y: auto;
+      flex: 1;
+      padding: 6px 10px;
+    }
+    .result-item {
+      padding: 4px 8px;
+      cursor: pointer;
+      border-radius: 3px;
+      font-size: 12px;
+      color: #94a3b8;
+      border-bottom: 1px solid #222;
+      transition: background 0.1s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .result-item:hover { background: #222; color: #e0e0e0; }
+    .result-item.active { background: #1e3a5f; color: #7dd3fc; }
+    .result-icon { color: #555; font-size: 11px; }
+
+    /* ── Result modal / inline viewer ── */
+    #result-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    #result-modal.open { display: flex; }
+    #result-modal-inner {
+      background: #1e1e1e;
+      border: 1px solid #444;
+      border-radius: 6px;
+      width: 80vw;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #result-modal-header {
+      padding: 8px 14px;
+      background: #222;
+      border-bottom: 1px solid #333;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    #result-modal-title {
+      font-size: 12px;
+      color: #7dd3fc;
+    }
+    #result-modal-close {
+      background: none;
+      border: none;
+      color: #888;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      padding: 0 4px;
+    }
+    #result-modal-close:hover { color: #e0e0e0; }
+    #result-modal-body {
+      overflow-y: auto;
+      padding: 12px 16px;
+      flex: 1;
+      font-size: 12px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: #e0e0e0;
+      line-height: 1.7;
+    }
+
+    /* ── Scrollbar style ── */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #111; }
+    ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #444; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>cli-cron-ui</h1>
+  <span>AI CLI Cron Dashboard</span>
+</header>
+
+<main>
+  <!-- Jobs -->
+  <div class="section" id="jobs-section">
+    <div class="section-header">Jobs</div>
+    <div id="jobs-container">
+      <table id="jobs-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Name</th>
+            <th>Cron</th>
+            <th>Next Run</th>
+            <th>Last Run</th>
+          </tr>
+        </thead>
+        <tbody id="jobs-tbody">
+          <tr><td colspan="5" class="no-jobs">Loading jobs...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Bottom: Log + Results -->
+  <div id="bottom">
+    <!-- Live Log -->
+    <div class="section" id="log-section">
+      <div class="section-header">Live Log</div>
+      <div id="log-pane"></div>
+    </div>
+
+    <!-- Results -->
+    <div class="section" id="results-section">
+      <div class="section-header">Results</div>
+      <div id="results-list">
+        <div class="no-jobs">Loading results...</div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<!-- Result modal -->
+<div id="result-modal">
+  <div id="result-modal-inner">
+    <div id="result-modal-header">
+      <span id="result-modal-title"></span>
+      <button id="result-modal-close" title="Close">&times;</button>
+    </div>
+    <pre id="result-modal-body"></pre>
+  </div>
+</div>
+
+<script>
+(function () {
+  'use strict';
+
+  /* ── Utilities ── */
+
+  function fmt(date) {
+    if (!date) return '—';
+    const d = new Date(date);
+    if (isNaN(d)) return '—';
+    return d.toLocaleString(undefined, {
+      month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+      hour12: false
+    });
+  }
+
+  /* ── Cron "next fire" calculation (client-side, no library) ── */
+  // Supports: * / - , in minute/hour/dom/month/dow fields
+  function parseCronField(field, min, max) {
+    const values = new Set();
+    for (const part of field.split(',')) {
+      const stepSplit = part.split('/');
+      const range = stepSplit[0];
+      const step = stepSplit[1] ? parseInt(stepSplit[1], 10) : 1;
+      let lo = min, hi = max;
+      if (range !== '*') {
+        const dash = range.split('-');
+        lo = parseInt(dash[0], 10);
+        hi = dash[1] !== undefined ? parseInt(dash[1], 10) : lo;
+      }
+      for (let v = lo; v <= hi; v += step) values.add(v);
+    }
+    return Array.from(values).sort((a, b) => a - b);
+  }
+
+  function nextCronFire(cronExpr, timezone) {
+    try {
+      const parts = cronExpr.trim().split(/\s+/);
+      if (parts.length !== 5) return null;
+      const [mF, hF, domF, monF, dowF] = parts;
+      const minutes = parseCronField(mF, 0, 59);
+      const hours   = parseCronField(hF, 0, 23);
+      const doms    = parseCronField(domF, 1, 31);
+      const months  = parseCronField(monF, 1, 12);
+      const dows    = parseCronField(dowF, 0, 6);
+
+      // Start from now + 1 minute
+      const now = new Date();
+      now.setSeconds(0, 0);
+      now.setMinutes(now.getMinutes() + 1);
+
+      for (let i = 0; i < 366 * 24 * 60; i++) {
+        const mo = now.getMonth() + 1; // 1-12
+        const dom = now.getDate();
+        const dow = now.getDay();       // 0=Sun
+        const hr = now.getHours();
+        const mn = now.getMinutes();
+
+        if (months.includes(mo) &&
+            (domF === '*' || doms.includes(dom)) &&
+            (dowF === '*' || dows.includes(dow)) &&
+            hours.includes(hr) &&
+            minutes.includes(mn)) {
+          return new Date(now);
+        }
+        now.setMinutes(now.getMinutes() + 1);
+      }
+      return null;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  /* ── Jobs ── */
+  function renderJobs(jobs) {
+    const tbody = document.getElementById('jobs-tbody');
+    if (!jobs || jobs.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="5" class="no-jobs">No jobs configured.</td></tr>';
+      return;
+    }
+    tbody.innerHTML = jobs.map(job => {
+      const active = job.active !== false;
+      const dotClass = active ? 'dot-active' : 'dot-inactive';
+      const next = nextCronFire(job.cron || '');
+      return `<tr>
+        <td><span class="dot ${dotClass}"></span></td>
+        <td class="job-name">${esc(job.name || job.id || '—')}</td>
+        <td class="job-cron">${esc(job.cron || '—')}</td>
+        <td class="job-next">${fmt(next)}</td>
+        <td class="job-last">${fmt(job.lastRun || job.last_run)}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  async function fetchJobs() {
+    try {
+      const res = await fetch('/api/jobs');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderJobs(Array.isArray(data) ? data : (data.jobs || []));
+    } catch (_) {}
+  }
+
+  fetchJobs();
+  setInterval(fetchJobs, 5000);
+
+  /* ── Live Log (SSE) ── */
+  const MAX_LINES = 200;
+  const logPane = document.getElementById('log-pane');
+  let logLines = 0;
+
+  function classifyLine(text) {
+    if (/\[FIRE\]/i.test(text))   return 'log-fire';
+    if (/\[EXIT\]/i.test(text))   return 'log-exit';
+    if (/\[STDERR\]/i.test(text)) return 'log-stderr';
+    if (/\[DAEMON\]/i.test(text)) return 'log-daemon';
+    return 'log-stdout';
+  }
+
+  function appendLog(text) {
+    // Trim to max lines
+    while (logLines >= MAX_LINES && logPane.firstChild) {
+      logPane.removeChild(logPane.firstChild);
+      logLines--;
+    }
+    const line = document.createElement('div');
+    line.className = 'log-line ' + classifyLine(text);
+    line.textContent = text;
+    logPane.appendChild(line);
+    logLines++;
+    logPane.scrollTop = logPane.scrollHeight;
+  }
+
+  function connectSSE() {
+    const es = new EventSource('/api/logs/stream');
+    es.onmessage = e => {
+      if (e.data) appendLog(e.data);
+    };
+    es.onerror = () => {
+      es.close();
+      setTimeout(connectSSE, 3000);
+    };
+  }
+  connectSSE();
+
+  /* ── Results ── */
+  const resultsList = document.getElementById('results-list');
+  let activeResultFile = null;
+
+  function renderResults(files) {
+    if (!files || files.length === 0) {
+      resultsList.innerHTML = '<div class="no-jobs">No result files.</div>';
+      return;
+    }
+    resultsList.innerHTML = files.map(f => {
+      const name = typeof f === 'string' ? f : (f.filename || f.name || JSON.stringify(f));
+      const isActive = name === activeResultFile;
+      return `<div class="result-item${isActive ? ' active' : ''}" data-file="${esc(name)}">
+        <span class="result-icon">&#9656;</span>${esc(name)}
+      </div>`;
+    }).join('');
+
+    resultsList.querySelectorAll('.result-item').forEach(el => {
+      el.addEventListener('click', () => openResult(el.dataset.file));
+    });
+  }
+
+  async function fetchResults() {
+    try {
+      const res = await fetch('/api/results');
+      if (!res.ok) return;
+      const data = await res.json();
+      renderResults(Array.isArray(data) ? data : (data.files || data.results || []));
+    } catch (_) {}
+  }
+
+  fetchResults();
+  setInterval(fetchResults, 10000);
+
+  /* ── Result modal ── */
+  const modal      = document.getElementById('result-modal');
+  const modalTitle = document.getElementById('result-modal-title');
+  const modalBody  = document.getElementById('result-modal-body');
+  const modalClose = document.getElementById('result-modal-close');
+
+  async function openResult(filename) {
+    activeResultFile = filename;
+    // Update active styling
+    resultsList.querySelectorAll('.result-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.file === filename);
+    });
+
+    try {
+      const res = await fetch('/api/results/' + encodeURIComponent(filename));
+      const text = await res.text();
+      modalTitle.textContent = filename;
+      modalBody.textContent = text;
+      modal.classList.add('open');
+    } catch (e) {
+      modalTitle.textContent = filename;
+      modalBody.textContent = 'Error loading result: ' + e.message;
+      modal.classList.add('open');
+    }
+  }
+
+  function closeModal() {
+    modal.classList.remove('open');
+    activeResultFile = null;
+    resultsList.querySelectorAll('.result-item').forEach(el => el.classList.remove('active'));
+  }
+
+  modalClose.addEventListener('click', closeModal);
+  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+
+  /* ── XSS escape ── */
+  function esc(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;');
+  }
+
+})();
+</script>
+</body>
+</html>
