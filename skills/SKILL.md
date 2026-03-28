@@ -177,8 +177,8 @@ node /path/to/cli-prompt-cron-ui/start.js
 # Gemini CLI
 "command": "gemini -p 'タスクの内容をここに記述'"
 
-# Codex
-"command": "codex 'タスクの内容をここに記述'"
+# Codex（非インタラクティブ実行には exec サブコマンドが必要）
+"command": "codex exec 'タスクの内容をここに記述'"
 
 # プロジェクトディレクトリ内で実行
 "command": "cd /path/to/project && claude -p 'このプロジェクトをレビューして'"
