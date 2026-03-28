@@ -2,6 +2,23 @@
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-03-28
+
+### Changed
+- **プロジェクト名**: `cli-prompt-cron-ui` → `cli-prompt-cron` に統一（旧ヘッドレス版は廃止）
+- **データディレクトリ**: `./data/` → プロジェクト内 `./data/` に移動。作業ディレクトリ制限のある環境でも動作可能に
+- **SKILL.md パス解決**: 相対パス（`./data/`）から SKILL.md のファイル位置ベース（`<プロジェクトルート>/data/`）に変更。作業ディレクトリに依存しない
+- **ターゲット CLI**: Gemini CLI・Codex をメインに。Claude Code は補助的な位置づけに変更
+- **ダッシュボード UI**: ダーク系ターミナル風 → クリーム系モダンデザイン（Design B）に刷新
+- **README 構成**: 「プロンプトでの導入・使い方」としてStep 1/2/3のフローに再構成。CLI共通のプロンプトに統一
+
+### Added
+- **launch.bat**: Windows 向けワンクリック起動バッチファイル（ポート競合自動解消付き）
+- **cron 式の日本語変換**: ダッシュボードで `0 9 * * *` → `毎日 09:00` と表示
+- **次回実行の相対表示**: `あと2時間`、`明日 09:00` など
+- **ライブインジケーター**: ヘッダーに緑点滅の接続状態表示
+- **index.html.backup**: 元のダークテーマデザインのバックアップ
+
 ## [1.0.1] - 2026-03-28
 
 ### Fixed
@@ -21,8 +38,8 @@
 - File-based cron daemon for AI CLIs (Claude Code, Gemini CLI, Codex)
 - Browser dashboard at `http://localhost:3300` (vanilla HTML/CSS/JS, no build step)
 - Real-time log streaming via Server-Sent Events (SSE)
-- Execution results saved per-job to `~/.cli-prompt-cron/results/`
-- Job management via `~/.cli-prompt-cron/jobs/*.json`
+- Execution results saved per-job to `./data/results/`
+- Job management via `./data/jobs/*.json`
 - Hot-reload with Chokidar (add / edit / delete jobs without restarting daemon)
 - `start.js`: one-command launch — daemon + UI server + auto browser open
 - Per-job timezone support
