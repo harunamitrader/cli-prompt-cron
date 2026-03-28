@@ -63,13 +63,13 @@ cli-prompt-cron のデーモンとダッシュボードを起動して
 npm start        # デーモン + ダッシュボード + ブラウザが一括起動
 ```
 
-**デスクトップショートカットを作る**
+**デスクトップショートカット**
 
-Windows の場合、`create-shortcut.bat` をダブルクリックするだけでデスクトップにショートカットが作成されます。
+`npm install` 時にデスクトップへショートカットが自動作成されます（Windows / Mac / Linux 対応）。
+手動で再作成したい場合：
 
-Mac / Linux の場合は AI に指示してください：
-```
-cli-prompt-cron のデスクトップショートカットを作って。ダブルクリックでデーモンとダッシュボードが起動するようにして。
+```bash
+node scripts/create-shortcut.js
 ```
 
 ---
