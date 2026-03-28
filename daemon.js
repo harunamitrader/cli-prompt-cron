@@ -37,6 +37,9 @@ const PIDS_DIR    = join(BASE_DIR, 'pids');
 /** @type {Map<string, import('node-cron').ScheduledTask>} */
 const tasks = new Map();
 
+/** @type {Set<import('node:child_process').ChildProcess>} */
+const runningChildren = new Set();
+
 // ── Logging ──────────────────────────────────────────────────────────────────
 
 function todayLogPath() {
@@ -85,6 +88,8 @@ function runCommand(jobName, command) {
     windowsHide: true,
   });
 
+  runningChildren.add(child);
+
   // Write PID to pid file (array of running processes)
   const pidFile = join(PIDS_DIR, `${jobName}.json`);
   const pidEntry = { pid: child.pid, command, startedAt: new Date().toISOString() };
@@ -119,6 +124,7 @@ function runCommand(jobName, command) {
   });
 
   child.on('close', (code) => {
+    runningChildren.delete(child);
     log(jobName, `EXIT code=${code ?? '?'}`);
 
     // Remove this PID from pid file
@@ -315,11 +321,32 @@ function shutdown(signal) {
   log('daemon', `Received ${signal} — stopping all tasks…`);
   for (const [name, task] of tasks) {
     try { task.stop(); } catch { /* ignore */ }
-    log('daemon', `Stopped: ${name}`);
+    log('daemon', `Stopped task: ${name}`);
   }
   tasks.clear();
-  log('daemon', 'Goodbye.');
-  process.exit(0);
+
+  // Kill all running child processes
+  if (runningChildren.size > 0) {
+    log('daemon', `Killing ${runningChildren.size} running process(es)…`);
+    for (const child of runningChildren) {
+      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+    }
+    // Force kill after 2 seconds
+    setTimeout(() => {
+      for (const child of runningChildren) {
+        try { child.kill('SIGKILL'); } catch { /* ignore */ }
+      }
+      // Clean up PID files
+      try {
+        for (const f of readdirSync(PIDS_DIR)) { try { unlinkSync(join(PIDS_DIR, f)); } catch { /* ignore */ } }
+      } catch { /* ignore */ }
+      log('daemon', 'Goodbye.');
+      process.exit(0);
+    }, 2000);
+  } else {
+    log('daemon', 'Goodbye.');
+    process.exit(0);
+  }
 }
 
 process.on('SIGINT',  () => shutdown('SIGINT'));
