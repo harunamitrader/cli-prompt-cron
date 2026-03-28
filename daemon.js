@@ -61,7 +61,7 @@ const IS_WINDOWS = process.platform === 'win32';
 
 function shellArgs(command) {
   return IS_WINDOWS
-    ? ['cmd', ['/c', command]]
+    ? ['powershell', ['-Command', command]] // cmd /c mangles double-quoted args
     : ['sh',  ['-c', command]];
 }
 
