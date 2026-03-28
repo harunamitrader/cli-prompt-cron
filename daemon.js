@@ -18,6 +18,7 @@ import {
   writeFileSync,
   readdirSync,
   existsSync,
+  unlinkSync,
 } from 'node:fs';
 import { join, basename, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -29,6 +30,7 @@ const BASE_DIR    = join(__dirname, 'data');
 const JOBS_DIR    = join(BASE_DIR, 'jobs');
 const LOGS_DIR    = join(BASE_DIR, 'logs');
 const RESULTS_DIR = join(BASE_DIR, 'results');
+const PIDS_DIR    = join(BASE_DIR, 'pids');
 
 // ── State ────────────────────────────────────────────────────────────────────
 
@@ -83,6 +85,16 @@ function runCommand(jobName, command) {
     windowsHide: true,
   });
 
+  // Write PID file so ui-server can kill the process
+  const pidFile = join(PIDS_DIR, `${jobName}.json`);
+  try {
+    writeFileSync(pidFile, JSON.stringify({
+      pid: child.pid,
+      command,
+      startedAt: new Date().toISOString(),
+    }) + '\n', 'utf8');
+  } catch { /* best-effort */ }
+
   /** @type {string[]} */
   const stdoutLines = [];
 
@@ -107,6 +119,9 @@ function runCommand(jobName, command) {
 
   child.on('close', (code) => {
     log(jobName, `EXIT code=${code ?? '?'}`);
+
+    // Remove PID file
+    try { unlinkSync(pidFile); } catch { /* ignore */ }
 
     // Save collected stdout to a result file
     try {
@@ -235,6 +250,7 @@ function ensureDirs() {
   mkdirSync(JOBS_DIR,    { recursive: true });
   mkdirSync(LOGS_DIR,    { recursive: true });
   mkdirSync(RESULTS_DIR, { recursive: true });
+  mkdirSync(PIDS_DIR,    { recursive: true });
 }
 
 function loadExistingJobs() {

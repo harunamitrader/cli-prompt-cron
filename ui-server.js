@@ -25,6 +25,7 @@ const BASE_DIR    = join(__dirname, 'data');
 const JOBS_DIR    = join(BASE_DIR, 'jobs');
 const LOGS_DIR    = join(BASE_DIR, 'logs');
 const RESULTS_DIR = join(BASE_DIR, 'results');
+const PIDS_DIR    = join(BASE_DIR, 'pids');
 const PUBLIC_DIR  = join(__dirname, 'public');
 
 const PORT = Number(process.env.PORT) || 3300;
@@ -116,12 +117,24 @@ function handleJobs(res) {
     try {
       const raw = readFileSync(filePath, 'utf8');
       const job = JSON.parse(raw);
+      // Check if a process is currently running
+      let running = false;
+      try {
+        const pidPath = join(PIDS_DIR, `${name}.json`);
+        if (existsSync(pidPath)) {
+          const pidInfo = JSON.parse(readFileSync(pidPath, 'utf8'));
+          // Verify process is still alive
+          process.kill(pidInfo.pid, 0);
+          running = true;
+        }
+      } catch { /* not running */ }
       return {
         name,
         cron:     job.cron     ?? null,
         command:  job.command  ?? null,
         timezone: job.timezone ?? null,
         active:   job.active   !== false,
+        running,
       };
     } catch {
       return { name, error: 'parse error' };
@@ -217,6 +230,38 @@ function handleToggleJob(req, res, jobName) {
       sendJSON(res, 404, { error: 'job not found' });
     } else {
       sendJSON(res, 500, { error: 'failed to update job' });
+    }
+  }
+}
+
+/** DELETE /api/running/:name — kill a running process */
+function handleKillProcess(res, jobName) {
+  if (jobName.includes('..') || jobName.includes('/') || jobName.includes('\\')) {
+    sendJSON(res, 400, { error: 'invalid job name' });
+    return;
+  }
+
+  const pidPath = join(PIDS_DIR, `${jobName}.json`);
+  try {
+    const pidInfo = JSON.parse(readFileSync(pidPath, 'utf8'));
+    process.kill(pidInfo.pid, 'SIGTERM');
+    // Give it a moment, then force kill if still alive
+    setTimeout(() => {
+      try {
+        process.kill(pidInfo.pid, 0); // check if alive
+        process.kill(pidInfo.pid, 'SIGKILL');
+      } catch { /* already dead */ }
+    }, 3000);
+    sendJSON(res, 200, { name: jobName, killed: true, pid: pidInfo.pid });
+  } catch (err) {
+    if (err.code === 'ENOENT') {
+      sendJSON(res, 404, { error: 'no running process for this job' });
+    } else if (err.code === 'ESRCH') {
+      // Process already dead, clean up stale PID file
+      try { fs.unlinkSync(pidPath); } catch { /* ignore */ }
+      sendJSON(res, 404, { error: 'process already exited' });
+    } else {
+      sendJSON(res, 500, { error: 'failed to kill process' });
     }
   }
 }
@@ -339,7 +384,7 @@ function router(req, res) {
   if (req.method === 'OPTIONS') {
     res.writeHead(204, {
       'Access-Control-Allow-Origin':  '*',
-      'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type',
     });
     res.end();
@@ -354,6 +399,17 @@ function router(req, res) {
     const jobMatch = pathname.match(/^\/api\/jobs\/(.+)$/);
     if (jobMatch) {
       handleToggleJob(req, res, decodeURIComponent(jobMatch[1]));
+      return;
+    }
+    sendJSON(res, 404, { error: 'not found' });
+    return;
+  }
+
+  // DELETE /api/running/:name — kill running process
+  if (req.method === 'DELETE') {
+    const runMatch = pathname.match(/^\/api\/running\/(.+)$/);
+    if (runMatch) {
+      handleKillProcess(res, decodeURIComponent(runMatch[1]));
       return;
     }
     sendJSON(res, 404, { error: 'not found' });

@@ -173,6 +173,22 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .kill-btn {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      background: #E74C3C;
+      color: #fff;
+      margin-left: 6px;
+      transition: background 0.15s;
+    }
+    .kill-btn:hover { background: #C0392B; }
+    .kill-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .running-badge { background: #FDEBD0; color: #CA6F1E; }
 
     .no-jobs-card {
       padding: 16px;
@@ -523,28 +539,38 @@
     }
     scroll.innerHTML = jobs.map(job => {
       const active = job.active !== false;
-      const badge = active
-        ? '<span class="status-badge status-active">稼働中</span>'
-        : '<span class="status-badge status-inactive">停止中</span>';
+      const running = job.running === true;
+      let badge;
+      if (running) {
+        badge = '<span class="status-badge running-badge">実行中</span>';
+      } else if (active) {
+        badge = '<span class="status-badge status-active">稼働中</span>';
+      } else {
+        badge = '<span class="status-badge status-inactive">停止中</span>';
+      }
       const schedule = humanizeCron(job.cron || '');
       const next = active ? nextCronFire(job.cron || '') : null;
       const rel = next ? relativeTime(next) : null;
       const nextLabel = rel ? `<strong>次回:</strong> ${esc(rel)}` : (next ? `<strong>次回:</strong> ${fmt(next)}` : '');
       const btnClass = active ? 'stop' : 'resume';
       const btnLabel = active ? '停止' : '再開';
+      const killBtn = running ? `<button class="kill-btn" data-job="${esc(job.name)}">強制停止</button>` : '';
       return `<div class="job-card">
         <div class="job-card-top">${badge}</div>
         <div class="job-card-name" title="${esc(job.name || job.id || '—')}">${esc(job.name || job.id || '—')}</div>
         <div class="job-card-schedule">${esc(schedule)}</div>
         ${nextLabel ? `<div class="job-card-next">${nextLabel}</div>` : ''}
         <div class="job-card-actions">
-          <button class="toggle-btn ${btnClass}" data-job="${esc(job.name)}">${btnLabel}</button>
+          <button class="toggle-btn ${btnClass}" data-job="${esc(job.name)}">${btnLabel}</button>${killBtn}
         </div>
       </div>`;
     }).join('');
 
     scroll.querySelectorAll('.toggle-btn').forEach(btn => {
       btn.addEventListener('click', () => toggleJob(btn.dataset.job, btn));
+    });
+    scroll.querySelectorAll('.kill-btn').forEach(btn => {
+      btn.addEventListener('click', () => killProcess(btn.dataset.job, btn));
     });
   }
 
@@ -554,6 +580,18 @@
       const res = await fetch('/api/jobs/' + encodeURIComponent(name), { method: 'PATCH' });
       if (res.ok) {
         await fetchJobs();
+      }
+    } catch (_) {}
+    btn.disabled = false;
+  }
+
+  async function killProcess(name, btn) {
+    if (!confirm(`「${name}」の実行中プロセスを強制停止しますか？`)) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch('/api/running/' + encodeURIComponent(name), { method: 'DELETE' });
+      if (res.ok) {
+        setTimeout(fetchJobs, 1000);
       }
     } catch (_) {}
     btn.disabled = false;
