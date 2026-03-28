@@ -1,210 +1,151 @@
 # cli-prompt-cron スキル
 
-**スキル名**: `cli-prompt-cron`
-**説明**: AI CLI cron デーモン + ブラウザダッシュボードの管理スキル
+## あなたの役割
 
-Gemini CLI・Codex・Claude Code 向けのスケジュール実行ジョブを管理します。
-変更は即座に反映されます（デーモン再起動不要）。
+あなたの仕事は `data/jobs/` 内の JSON ファイルを作成・編集・削除することだけです。
+コマンドの実行、ログの記録、結果の保存はすべてデーモンが自動で行います。あなたが関与する必要はありません。
 
-## パスの解決方法
+**やっていいこと:**
+- `data/jobs/` 内の JSON ファイルの作成・編集・削除
+- `data/jobs/` `data/logs/` `data/results/` の内容の読み取り
+- デーモンの起動（`node start.js`）
+
+**やってはいけないこと:**
+- スクリプトファイル（.sh, .bat, .ps1, .py 等）の作成
+- ラッパー、ヘルパー、補助ファイルの作成
+- コマンドの最適化や独自の工夫
+- `data/jobs/` 以外へのファイル書き込み
+
+ユーザーの指示はそのまま `command` フィールドに入れてください。デーモンがシェル経由で実行します。
+
+---
+
+## パスの解決
 
 このファイル（SKILL.md）の親ディレクトリの親がプロジェクトルートです。
 すべてのファイル操作は、そのプロジェクトルートからの絶対パスで行ってください。
 
 ```
 <プロジェクトルート> = このSKILL.mdの場所から ../.. （親の親）
-<プロジェクトルート>/data/jobs/    ← ジョブファイル
-<プロジェクトルート>/data/logs/    ← 実行ログ
-<プロジェクトルート>/data/results/ ← 実行結果
+<プロジェクトルート>/data/jobs/    ← ジョブファイル（あなたが編集する唯一の場所）
+<プロジェクトルート>/data/logs/    ← 実行ログ（読み取り専用）
+<プロジェクトルート>/data/results/ ← 実行結果（読み取り専用）
 ```
-
-> 作業ディレクトリがどこであっても、必ずこの方法でパスを解決してください。
 
 ---
 
-## 操作一覧
-
-### 1. ジョブ追加
+## ジョブ追加
 
 `<プロジェクトルート>/data/jobs/<名前>.json` を作成します。
 
 ```json
 {
   "cron": "0 9 * * *",
-  "command": "claude --allowedTools \"Write\" -p 'タスクを実行してください'",
+  "command": "gemini -p 'ユーザーが指定したプロンプト'",
   "timezone": "Asia/Tokyo",
   "active": true
 }
 ```
 
-**フィールド説明:**
+| フィールド  | 型      | 必須 | 説明 |
+|------------|---------|------|------|
+| `cron`     | string  | ✓    | cron 式（5フィールド形式） |
+| `command`  | string  | ✓    | シェルコマンド（デーモンがそのまま実行する） |
+| `timezone` | string  |      | タイムゾーン（省略時は `Asia/Tokyo` を推奨） |
+| `active`   | boolean |      | `false` で一時停止（デフォルト: `true`） |
 
-| フィールド  | 型      | 必須 | 説明                                                    |
-|------------|---------|------|---------------------------------------------------------|
-| `cron`     | string  | ✓    | cron 式（5フィールド形式）                               |
-| `command`  | string  | ✓    | 実行するシェルコマンド                                   |
-| `timezone` | string  |      | タイムゾーン。省略時は `Asia/Tokyo` を推奨              |
-| `active`   | boolean |      | `false` で一時停止（デフォルト: `true`）                 |
+### command の組み立て方
 
-#### ⚠️ 権限の確認（重要）
+ユーザーの指示をそのまま CLI コマンドにしてください。余計な加工はしないこと。
 
-ジョブ追加時、ユーザーのプロンプトに **権限（`--allowedTools` 等）の指定がない場合**、必ずユーザーに確認してから作成してください。
+| CLI | コマンド形式 |
+|-----|-------------|
+| Gemini CLI | `gemini -p 'プロンプト'` |
+| Codex | `codex exec 'プロンプト'` |
+| Claude Code | `claude -p 'プロンプト'` |
 
-**確認メッセージの例:**
-```
-このジョブに必要な権限を指定してください：
-
-① 権限なし（テキスト生成のみ、ツール使用なし）
-   → フラグ不要。最も安全。
-
-② ファイル書き込みのみ
-   → --allowedTools "Write"
-
-③ シェルコマンド実行のみ
-   → --allowedTools "Bash"
-
-④ Web検索のみ
-   → --allowedTools "WebSearch"
-
-⑤ 複数ツール（例: ファイル読み書き）
-   → --allowedTools "Read,Write"
-
-⑥ 全権限スキップ（危険・サンドボックス環境専用）
-   Claude Code: --dangerously-skip-permissions
-   Gemini CLI:  --yolo
-   Codex:       --dangerously-bypass-approvals-and-sandbox
-
-どれにしますか？（わからない場合は①を推奨）
-```
-
-ユーザーが選択した権限を `command` フィールドに反映してジョブを作成します。
-
-#### システムプロンプトの自動付与
-
-Claude Code を使うジョブには、確認要求を抑制するため **必ず** 以下を含めてください：
-
-```bash
-claude --allowedTools "Write" \
-  --system-prompt "Execute the task immediately. Do not ask for confirmation or clarification." \
-  -p "ユーザーのプロンプト"
-```
-
-Gemini CLI・Codex の場合はシステムプロンプトの相当フラグをそれぞれ適用してください。
-
-### 2. ジョブ停止
-
-対象ジョブの JSON ファイルを開き、`active` を `false` に変更します。
+**例:** ユーザーが「毎朝9時にGeminiに『ニュースまとめて』と送って」と言ったら：
 
 ```json
 {
   "cron": "0 9 * * *",
-  "command": "claude -p 'タスクを実行してください'",
+  "command": "gemini -p 'ニュースまとめて'",
   "timezone": "Asia/Tokyo",
-  "active": false
+  "active": true
 }
 ```
 
-### 3. ジョブ再開
+これだけで完了。スクリプトを作ったり、出力をパイプしたりしないこと。
 
-対象ジョブの JSON ファイルを開き、`active` を `true` に戻します。
+### 権限の確認
 
-### 4. ジョブ削除
-
-`<プロジェクトルート>/data/jobs/<名前>.json` を削除します。
-
-```bash
-rm <プロジェクトルート>/data/jobs/<名前>.json
-```
-
-### 5. ジョブ一覧確認
-
-```bash
-ls <プロジェクトルート>/data/jobs/
-```
-
-### 6. ログ確認
-
-実行ログは日付ごとにファイルに記録されます。
+ユーザーのプロンプトに権限（`--allowedTools` 等）の指定がない場合、作成前にユーザーに確認してください。
 
 ```
-<プロジェクトルート>/data/logs/YYYY-MM-DD.log
+このジョブに必要な権限を選んでください：
+
+① 権限なし（テキスト生成のみ）→ フラグ不要
+② ファイル書き込み → --allowedTools "Write"
+③ シェルコマンド実行 → --allowedTools "Bash"
+④ Web検索 → --allowedTools "WebSearch"
+⑤ 複数ツール → --allowedTools "Read,Write"
+⑥ 全権限スキップ（危険）
+   Claude Code: --dangerously-skip-permissions
+   Gemini CLI:  --yolo
+   Codex:       --dangerously-bypass-approvals-and-sandbox
+
+わからない場合は①を推奨
 ```
 
-```bash
-# 今日のログを表示
-cat <プロジェクトルート>/data/logs/$(date +%Y-%m-%d).log
+### Claude Code のシステムプロンプト
 
-# リアルタイム監視
-tail -f <プロジェクトルート>/data/logs/$(date +%Y-%m-%d).log
+Claude Code ジョブには確認要求を抑制するため以下を含めてください：
 
-# ログ一覧
-ls <プロジェクトルート>/data/logs/
+```
+claude --system-prompt "Execute the task immediately. Do not ask for confirmation or clarification." -p 'プロンプト'
 ```
 
-### 7. 実行結果確認
+---
 
-実行結果は `<プロジェクトルート>/data/results/` に JSON 形式で保存されます。
+## ジョブ停止
 
-```bash
-# 結果ファイル一覧
-ls <プロジェクトルート>/data/results/
+JSON ファイルの `active` を `false` に変更します。
 
-# 特定の結果を確認
-cat <プロジェクトルート>/data/results/<ファイル名>.json
-```
+## ジョブ再開
 
-### 8. ダッシュボード起動
+JSON ファイルの `active` を `true` に戻します。
+
+## ジョブ削除
+
+JSON ファイルを削除します。
+
+## ジョブ一覧
+
+`<プロジェクトルート>/data/jobs/` の内容を表示します。
+
+## ログ確認
+
+`<プロジェクトルート>/data/logs/YYYY-MM-DD.log` を読みます。
+
+## 実行結果確認
+
+`<プロジェクトルート>/data/results/` の内容を読みます。
+
+## ダッシュボード起動
 
 ```bash
 node <プロジェクトルート>/start.js
 ```
 
-起動後、ブラウザが自動で開き `http://localhost:3300` のダッシュボードが表示されます。
-手動でアクセスする場合は `http://localhost:3300` を開いてください。
-
 ---
 
-## cron 式チートシート（JST / Asia/Tokyo 基準）
+## cron 式チートシート
 
-| cron 式          | 実行タイミング                       |
-|-----------------|-------------------------------------|
-| `0 9 * * *`     | 毎朝 9:00                           |
-| `0 8 * * 1`     | 毎週月曜 8:00                       |
-| `0 12 * * 1-5`  | 平日（月〜金）12:00（ランチタイム） |
-| `0 18 * * *`    | 毎日 18:00                          |
-| `0 0 1 * *`     | 毎月 1 日 0:00                      |
-| `*/30 * * * *`  | 30 分ごと                           |
-| `0 9,18 * * *`  | 毎日 9:00 と 18:00                  |
-| `0 0 * * 0`     | 毎週日曜 0:00（週次レポート等）     |
-| `0 7 * * 1-5`   | 平日 7:00（朝のブリーフィング）     |
-| `0 23 * * *`    | 毎日 23:00（日次まとめ）            |
-
----
-
-## コマンド例
-
-```bash
-# Claude Code
-"command": "claude -p 'タスクの内容をここに記述'"
-
-# Gemini CLI
-"command": "gemini -p 'タスクの内容をここに記述'"
-
-# Codex（非インタラクティブ実行には exec サブコマンドが必要）
-"command": "codex exec 'タスクの内容をここに記述'"
-
-# プロジェクトディレクトリ内で実行
-"command": "cd /path/to/project && claude -p 'このプロジェクトをレビューして'"
-
-# 複合コマンド
-"command": "cd /path/to/project && git pull && claude -p '変更内容を要約して'"
-```
-
----
-
-## 注意事項
-
-- `command` フィールドはシェルコマンドとして実行されます。信頼できる内容のみ記述してください。
-- デーモンが起動していない場合、スケジュールされたジョブは実行されません。
-- タイムゾーンを省略するとサーバーのローカル時刻が使用されます。日本時間で動作させる場合は `"timezone": "Asia/Tokyo"` を明示的に指定してください。
-- ダッシュボードはデフォルトでポート `3300` を使用します。
+| cron 式 | 実行タイミング |
+|---------|---------------|
+| `0 9 * * *` | 毎朝 9:00 |
+| `0 8 * * 1` | 毎週月曜 8:00 |
+| `0 12 * * 1-5` | 平日 12:00 |
+| `*/30 * * * *` | 30 分ごと |
+| `* * * * *` | 毎分 |
+| `0 9,18 * * *` | 毎日 9:00 と 18:00 |
