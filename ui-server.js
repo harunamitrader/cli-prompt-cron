@@ -1035,9 +1035,10 @@ function handleRunJobNow(res, jobName) {
     writeFileSync(pidPath, JSON.stringify(pids) + '\n', 'utf8');
   } catch { /* best-effort */ }
 
+  const stdoutLines = [];
   child.stdout.on('data', (chunk) => {
     for (const line of chunk.toString().split('\n')) {
-      if (line.trim()) appendLog(`${logTag}/stdout`, line);
+      if (line.trim()) { appendLog(`${logTag}/stdout`, line); stdoutLines.push(line); }
     }
   });
   child.stderr.on('data', (chunk) => {
@@ -1059,6 +1060,26 @@ function handleRunJobNow(res, jobName) {
       } else {
         unlinkSync(pidPath);
       }
+    } catch { /* best-effort */ }
+    // Save result file
+    try {
+      const ts = new Date().toISOString().replace(/:/g, '-');
+      const filename = `${jobName}-${ts}.txt`;
+      const filePath = join(RESULTS_DIR, filename);
+      const headerLines = [
+        `job: ${jobName}`,
+        `logId: ${logId}`,
+        `targetCli: ${targetCli}`,
+        `permissionProfile: ${permissionProfile}`,
+        `sessionStrategy: ${sessionStrategy}`,
+        `sessionEffectiveStrategy: ${commandInfo.sessionEffectiveStrategy || 'fresh'}`,
+        `sessionId: `,
+        `sessionSourceJob: ${jobName}`,
+        `runAt: ${startedAt}`,
+        '',
+      ];
+      writeFileSync(filePath, headerLines.join('\n') + stdoutLines.join('\n'), 'utf8');
+      appendLog(logTag, `Result saved → ${filename}`);
     } catch { /* best-effort */ }
   });
 
