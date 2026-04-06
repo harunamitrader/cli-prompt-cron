@@ -10,7 +10,7 @@
 
 import { watch } from 'chokidar';
 import cron from 'node-cron';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import {
   mkdirSync,
   readFileSync,
@@ -327,6 +327,27 @@ function findLatestCodexSessionId(sinceIso) {
   }
 }
 
+/**
+ * Run `gemini --list-sessions` synchronously from the given workdir and return
+ * the set of session UUIDs found in its output.
+ * @param {string} workdir
+ * @returns {Set<string>}
+ */
+function listGeminiSessionIdsSync(workdir) {
+  try {
+    const [bin, args] = shellArgs('gemini --list-sessions');
+    const result = spawnSync(bin, args, { cwd: workdir, encoding: 'utf8', windowsHide: true, timeout: 15000 });
+    const output = (result.stdout || '') + (result.stderr || '');
+    const uuids = new Set();
+    for (const m of output.matchAll(/\[([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\]/gi)) {
+      uuids.add(m[1]);
+    }
+    return uuids;
+  } catch {
+    return new Set();
+  }
+}
+
 function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy = 'fresh', sessionRecord = null) {
   const target = normalizeTargetCli(targetCli) || 'gemini';
   const profile = normalizePermissionProfile(permissionProfile) || 'safe';
@@ -334,14 +355,6 @@ function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy = 'f
   const quotedPrompt = `'${escapeSingleQuotedPrompt(prompt)}'`;
 
   if (target === 'gemini') {
-    if (strategy.mode === 'selected') {
-      return {
-        command: `gemini${profile === 'edit' ? ' --approval-mode=auto_edit' : profile === 'plan' ? ' --approval-mode=plan' : profile === 'full' ? ' --approval-mode=yolo' : ''} -p ${quotedPrompt}`,
-        sessionEffectiveStrategy: 'fresh',
-        sessionWarning: 'selected session is not supported for Gemini yet; falling back to fresh',
-        selectedSessionId: strategy.sessionId,
-      };
-    }
     const flagsByProfile = {
       safe: '',
       edit: '--approval-mode=auto_edit',
@@ -349,7 +362,16 @@ function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy = 'f
       full: '--approval-mode=yolo',
     };
     const flags = flagsByProfile[profile];
-    return { command: `gemini${flags ? ' ' + flags : ''} -p ${quotedPrompt}`, sessionEffectiveStrategy: 'fresh', sessionWarning: null, selectedSessionId: null };
+    const baseFlags = flags ? ` ${flags}` : '';
+    if (strategy.mode === 'selected' && strategy.sessionId) {
+      return {
+        command: `gemini${baseFlags} --resume ${strategy.sessionId} -p ${quotedPrompt}`,
+        sessionEffectiveStrategy: `session:${strategy.sessionId}`,
+        sessionWarning: null,
+        selectedSessionId: strategy.sessionId,
+      };
+    }
+    return { command: `gemini${baseFlags} -p ${quotedPrompt}`, sessionEffectiveStrategy: 'fresh', sessionWarning: null, selectedSessionId: null };
   }
 
   if (target === 'claude') {
@@ -412,6 +434,11 @@ function runCommand(jobName, logTag, command, context) {
   log(logTag, `SESSION → strategy=${sessionStrategyLabel}${context.sessionKey ? ` key=${context.sessionKey}` : ''}`);
   log(logTag, `FIRE → ${command}`);
   log(logTag, `CWD  → ${workdir}`);
+
+  // Capture Gemini session IDs before run (for fresh session detection after exit)
+  const preGeminiSessionIds = (context.targetCli === 'gemini' && context.sessionEffectiveStrategy === 'fresh')
+    ? listGeminiSessionIdsSync(workdir)
+    : null;
 
   const [bin, args] = shellArgs(command);
   const child = spawn(bin, args, {
@@ -481,6 +508,32 @@ function runCommand(jobName, logTag, command, context) {
       const selected = touchSelectedSession(context.selectedSessionId, jobName);
       if (selected) resultSessionSourceJob = selected.ownerJobName;
       updateJobSessionUsage(jobName, context.selectedSessionId);
+    }
+
+    if (context.targetCli === 'gemini' && context.sessionEffectiveStrategy === 'fresh' && preGeminiSessionIds !== null) {
+      const postGeminiSessionIds = listGeminiSessionIdsSync(workdir);
+      const newIds = [...postGeminiSessionIds].filter((id) => !preGeminiSessionIds.has(id));
+      if (newIds.length > 0) {
+        const sessionId = newIds[0];
+        writeSessionRecord({
+          jobName,
+          logId: logTag,
+          targetCli: 'gemini',
+          permissionProfile: context.permissionProfile,
+          sessionStrategy: 'fresh',
+          sessionKey: context.sessionKey || makeSessionKey(jobName, logTag),
+          sessionId,
+          createdAt: startedAt,
+          lastUsedAt: new Date().toISOString(),
+          lastUsedByJob: jobName,
+        });
+        updateJobSessionUsage(jobName, sessionId);
+        resultSessionId = sessionId;
+        resultSessionSourceJob = jobName;
+        log(logTag, `SESSION → Gemini session detected: ${sessionId}`);
+      } else {
+        log(logTag, 'SESSION → no new Gemini session found after run');
+      }
     }
 
     if (context.targetCli === 'codex' && context.sessionEffectiveStrategy === 'fresh') {

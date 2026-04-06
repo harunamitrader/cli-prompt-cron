@@ -1354,7 +1354,8 @@
   async function refreshCreateSessionOptions(preferredValue) {
     const targetCli = normalizeTargetCli(createTargetSelect.value) || 'gemini';
     const currentValue = preferredValue || createSessionSelect.value || 'fresh';
-    const immediateSessions = targetCli === 'codex' ? managedSessions : [];
+    const filterSessions = (all) => (all || []).filter(s => (s.targetCli || 'codex') === targetCli);
+    const immediateSessions = filterSessions(managedSessions);
     const renderOptions = (sessions) => {
       const options = [{ value: 'fresh', label: 'fresh' }]
         .concat((sessions || []).map(session => ({
@@ -1365,13 +1366,12 @@
         .map(option => `<option value="${esc(option.value)}">${esc(option.label)}</option>`)
         .join('');
       createSessionSelect.value = options.some(option => option.value === currentValue) ? currentValue : 'fresh';
-      createSessionSelect.disabled = targetCli !== 'codex' && options.length <= 1;
+      createSessionSelect.disabled = options.length <= 1;
     };
 
     renderOptions(immediateSessions);
     managedSessions = await fetchSessions();
-    const sessions = targetCli === 'codex' ? managedSessions : [];
-    renderOptions(sessions);
+    renderOptions(filterSessions(managedSessions));
   }
 
   function resetCreateForm() {
@@ -1694,7 +1694,8 @@
         const jobs = await fetch('/api/jobs').then(r => r.json()).catch(() => []);
         const jobData = jobs.find(j => j.name === jobName);
         const currentTargetCli = normalizeTargetCli(jobData?.targetCli || card.querySelector('[data-field="targetCli"]')?.dataset.raw || detectTargetCli(jobData?.command || '')) || 'gemini';
-        const cachedSessions = currentTargetCli === 'codex' ? managedSessions : [];
+        const filterByCli = (all) => (all || []).filter(s => (s.targetCli || 'codex') === currentTargetCli);
+        const cachedSessions = filterByCli(managedSessions);
         const recentSessionId = jobData?.recentSessionId || null;
         const fillOptions = (sessions) => {
           const freshOptions = [['fresh', 'fresh']];
@@ -1705,11 +1706,9 @@
           input.innerHTML = [...freshOptions, ...sessionOptions].map(([value, label]) => `<option value="${esc(value)}"${value === raw ? ' selected' : ''}>${esc(label)}</option>`).join('');
         };
         fillOptions(cachedSessions);
-        const sessions = currentTargetCli === 'codex'
-          ? await fetch('/api/sessions').then(r => r.ok ? r.json() : []).catch(() => [])
-          : [];
-        managedSessions = Array.isArray(sessions) ? sessions : managedSessions;
-        fillOptions(currentTargetCli === 'codex' ? managedSessions : []);
+        const allSessions = await fetch('/api/sessions').then(r => r.ok ? r.json() : []).catch(() => []);
+        managedSessions = Array.isArray(allSessions) ? allSessions : managedSessions;
+        fillOptions(filterByCli(managedSessions));
         input.addEventListener('change', save, { once: true });
       })();
     }

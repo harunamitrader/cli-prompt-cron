@@ -371,10 +371,18 @@ function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy, ses
       full: '--approval-mode=yolo',
     };
     const flags = flagsByProfile[profile];
+    const baseFlags = flags ? ` ${flags}` : '';
+    if (strategy.mode === 'selected' && strategy.sessionId) {
+      return {
+        command: `gemini${baseFlags} --resume ${strategy.sessionId} -p ${quotedPrompt}`,
+        sessionEffectiveStrategy: `session:${strategy.sessionId}`,
+        sessionWarning: null,
+      };
+    }
     return {
-      command: `gemini${flags ? ' ' + flags : ''} -p ${quotedPrompt}`,
+      command: `gemini${baseFlags} -p ${quotedPrompt}`,
       sessionEffectiveStrategy: 'fresh',
-      sessionWarning: strategy.mode === 'selected' ? 'selected session is not supported for Gemini yet; falling back to fresh' : null,
+      sessionWarning: null,
     };
   }
 
