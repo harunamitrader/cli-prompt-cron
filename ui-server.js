@@ -966,6 +966,97 @@ function handleUpdateJob(req, res, jobName) {
   });
 }
 
+/** POST /api/jobs/:name/run — immediately trigger a job (fire-and-forget) */
+function handleRunJobNow(res, jobName) {
+  if (jobName.includes('..') || jobName.includes('/') || jobName.includes('\\')) {
+    sendJSON(res, 400, { error: 'invalid job name' });
+    return;
+  }
+
+  const filePath = join(JOBS_DIR, `${jobName}.json`);
+  if (!existsSync(filePath)) {
+    sendJSON(res, 404, { error: 'job not found' });
+    return;
+  }
+
+  let job;
+  try {
+    job = JSON.parse(readFileSync(filePath, 'utf8'));
+  } catch {
+    sendJSON(res, 500, { error: 'failed to read job' });
+    return;
+  }
+
+  const targetCli = normalizeTargetCli(job.targetCli) || 'gemini';
+  const permissionProfile = inferPermissionProfile(targetCli, '', job.permissionProfile);
+  const prompt = String(job.prompt || '').trim();
+  const sessionStrategy = normalizeSessionStrategy(job.sessionStrategy);
+  const logId = String(job.logId || '----');
+  const logTag = `${logId}/manual`;
+
+  if (!prompt) {
+    sendJSON(res, 400, { error: 'job has no prompt' });
+    return;
+  }
+
+  const settings = loadSettings();
+  const workdir = settings.defaultWorkdir;
+  const commandInfo = buildCommand(targetCli, permissionProfile, prompt, sessionStrategy, null);
+  const { command } = commandInfo;
+  const startedAt = new Date().toISOString();
+
+  appendLog(logTag, `MANUAL RUN → ${command}`);
+  appendLog(logTag, `CWD  → ${workdir}`);
+
+  const [bin, args] = shellArgs(command);
+  const child = spawn(bin, args, {
+    stdio: ['ignore', 'pipe', 'pipe'],
+    windowsHide: true,
+    cwd: workdir,
+    detached: false,
+  });
+
+  // Write PID file
+  const pidPath = join(PIDS_DIR, `${jobName}.json`);
+  const pidEntry = { pid: child.pid, command, startedAt, logTag };
+  try {
+    let pids = [];
+    try { pids = JSON.parse(readFileSync(pidPath, 'utf8')); } catch { /* new */ }
+    if (!Array.isArray(pids)) pids = [];
+    pids.push(pidEntry);
+    writeFileSync(pidPath, JSON.stringify(pids) + '\n', 'utf8');
+  } catch { /* best-effort */ }
+
+  child.stdout.on('data', (chunk) => {
+    for (const line of chunk.toString().split('\n')) {
+      if (line.trim()) appendLog(`${logTag}/stdout`, line);
+    }
+  });
+  child.stderr.on('data', (chunk) => {
+    for (const line of chunk.toString().split('\n')) {
+      if (line.trim()) appendLog(`${logTag}/stderr`, line);
+    }
+  });
+  child.on('error', (err) => {
+    appendLog(`${logTag}/error`, `spawn error: ${err.message}`);
+  });
+  child.on('close', (code) => {
+    appendLog(logTag, `EXIT code=${code ?? '?'}`);
+    // Remove from PID file
+    try {
+      const raw = JSON.parse(readFileSync(pidPath, 'utf8'));
+      const remaining = (Array.isArray(raw) ? raw : [raw]).filter((p) => p.pid !== child.pid);
+      if (remaining.length > 0) {
+        writeFileSync(pidPath, JSON.stringify(remaining) + '\n', 'utf8');
+      } else {
+        unlinkSync(pidPath);
+      }
+    } catch { /* best-effort */ }
+  });
+
+  sendJSON(res, 202, { name: jobName, pid: child.pid, startedAt });
+}
+
 /** DELETE /api/running/:name — kill all running processes for a job */
 function handleKillProcess(res, jobName) {
   if (jobName.includes('..') || jobName.includes('/') || jobName.includes('\\')) {
@@ -1174,6 +1265,11 @@ function router(req, res) {
   if (req.method === 'POST') {
     if (pathname === '/api/jobs') {
       handleCreateJob(req, res);
+      return;
+    }
+    const jobRunMatch = pathname.match(/^\/api\/jobs\/(.+)\/run$/);
+    if (jobRunMatch) {
+      handleRunJobNow(res, decodeURIComponent(jobRunMatch[1]));
       return;
     }
     const sessionPromptMatch = pathname.match(/^\/api\/sessions\/([^/]+)\/prompt$/);

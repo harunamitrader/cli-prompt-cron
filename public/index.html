@@ -524,6 +524,26 @@
       opacity: 0.5;
       cursor: not-allowed;
     }
+    .run-now-btn {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 4px 12px;
+      border-radius: 6px;
+      border: none;
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s;
+      background: #D6EAF8;
+      color: #1A5276;
+    }
+    .run-now-btn:hover {
+      background: #85C1E9;
+      color: #fff;
+    }
+    .run-now-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
     .running-badge { background: #FDEBD0; color: #CA6F1E; }
 
     /* ── Running section ── */
@@ -1461,6 +1481,7 @@
         ${nextLabel ? `<div class="job-card-next">${nextLabel}</div>` : ''}
         <div class="job-card-actions">
           <button class="toggle-btn ${btnClass}" data-job="${esc(job.name)}">${btnLabel}</button>
+          <button class="run-now-btn" data-job="${esc(job.name)}">即実行</button>
           <button class="delete-btn" data-job="${esc(job.name)}">削除</button>
         </div>
       </div>`;
@@ -1468,6 +1489,9 @@
 
     scroll.querySelectorAll('.toggle-btn').forEach(btn => {
       btn.addEventListener('click', () => toggleJob(btn.dataset.job, btn));
+    });
+    scroll.querySelectorAll('.run-now-btn').forEach(btn => {
+      btn.addEventListener('click', () => runJobNow(btn.dataset.job, btn));
     });
     scroll.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', () => deleteJob(btn.dataset.job, btn));
@@ -1699,6 +1723,28 @@
         body: JSON.stringify(updates),
       });
     } catch (_) { return null; }
+  }
+
+  async function runJobNow(name, btn) {
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = '実行中...';
+    try {
+      const res = await fetch('/api/jobs/' + encodeURIComponent(name) + '/run', { method: 'POST' });
+      if (res.ok) {
+        btn.textContent = '実行開始';
+        setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 2000);
+        setTimeout(fetchJobs, 500);
+        return;
+      } else {
+        const err = await res.json().catch(() => ({}));
+        alert(err.error || '即実行に失敗しました');
+      }
+    } catch (_) {
+      alert('即実行に失敗しました');
+    }
+    btn.textContent = orig;
+    btn.disabled = false;
   }
 
   async function toggleJob(name, btn) {
