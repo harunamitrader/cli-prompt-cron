@@ -340,6 +340,23 @@
       text-overflow: ellipsis;
       cursor: default;
     }
+    .job-card-model {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      font-size: 10px;
+      font-weight: 700;
+      color: #1A5276;
+      background: #D6EAF8;
+      border-radius: 999px;
+      padding: 3px 8px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      cursor: pointer;
+      border-bottom: 1px dashed transparent;
+    }
+    .job-card-model:hover { border-bottom-color: #1A5276; }
     .job-card-profile {
       display: inline-flex;
       align-items: center;
@@ -930,6 +947,10 @@
               <option value="fresh">fresh</option>
             </select>
           </label>
+          <label class="job-create-field">
+            <span class="job-create-label">モデル <small style="font-weight:normal;opacity:.6">(省略可)</small></span>
+            <select id="create-model" class="job-create-select"></select>
+          </label>
           <label class="job-create-field span-2">
             <span class="job-create-label">cron</span>
             <input id="create-cron" class="job-create-input" type="text" value="0 9 * * *" placeholder="例: 0 9 * * *" />
@@ -1153,6 +1174,47 @@
     return { prompt: prompt || cmd, flags };
   }
 
+  const MODEL_OPTIONS = {
+    gemini: [
+      '',
+      'gemini-3-flash-preview',
+      'gemini-2.5-pro',
+      'gemini-2.5-flash',
+      'gemini-2.5-flash-lite',
+      'gemini-2.0-flash',
+      'gemini-2.0-flash-lite',
+      'gemini-1.5-pro',
+      'gemini-1.5-flash',
+    ],
+    codex: [
+      '',
+      'gpt-5.4',
+      'gpt-5.4-mini',
+      'codex-mini-latest',
+      'o4-mini',
+      'o3',
+      'o3-mini',
+      'gpt-4.1',
+      'gpt-4.1-mini',
+      'gpt-4.1-nano',
+      'gpt-4o',
+      'gpt-4o-mini',
+    ],
+    claude: [
+      '',
+      'claude-opus-4-6',
+      'claude-sonnet-4-6',
+      'claude-haiku-4-5-20251001',
+      'claude-opus-4-5',
+      'claude-sonnet-4-5',
+      'claude-haiku-4-5',
+    ],
+  };
+
+  function getModelOptions(targetCli) {
+    return MODEL_OPTIONS[normalizeTargetCli(targetCli)] || [''];
+  }
+
   function normalizeTargetCli(value) {
     const v = String(value || '').trim().toLowerCase();
     if (!v) return '';
@@ -1320,6 +1382,7 @@
   const createTargetSelect = document.getElementById('create-target');
   const createPermissionSelect = document.getElementById('create-permission');
   const createSessionSelect = document.getElementById('create-session');
+  const createModelInput = document.getElementById('create-model');
   const createCronInput = document.getElementById('create-cron');
   const createTimezoneInput = document.getElementById('create-timezone');
   const createActiveInput = document.getElementById('create-active');
@@ -1374,6 +1437,14 @@
     renderOptions(filterSessions(managedSessions));
   }
 
+  function refreshCreateModelOptions(preferredValue) {
+    const opts = getModelOptions(createTargetSelect.value);
+    createModelInput.innerHTML = opts
+      .map(m => `<option value="${esc(m)}"${m === (preferredValue || '') ? ' selected' : ''}>${esc(m) || '(デフォルト)'}</option>`)
+      .join('');
+    if (preferredValue !== undefined) createModelInput.value = preferredValue;
+  }
+
   function resetCreateForm() {
     createNameInput.value = '';
     createPromptInput.value = '';
@@ -1382,6 +1453,7 @@
     createTargetSelect.value = 'gemini';
     createPermissionSelect.value = 'safe';
     createActiveInput.checked = true;
+    refreshCreateModelOptions('');
     createLogIdInput.value = nextLogIdFromJobs(currentJobs);
     refreshCreateSessionOptions('fresh');
   }
@@ -1393,6 +1465,7 @@
       targetCli: normalizeTargetCli(createTargetSelect.value) || 'gemini',
       permissionProfile: createPermissionSelect.value || 'safe',
       sessionStrategy: createSessionSelect.value || 'fresh',
+      model: createModelInput.value.trim() || null,
       prompt: createPromptInput.value.trim(),
       cron: createCronInput.value.trim(),
       timezone: createTimezoneInput.value.trim() || 'Asia/Tokyo',
@@ -1457,6 +1530,7 @@
       const permissionProfile = inferPermissionProfile(targetCli, cmd, job.permissionProfile);
       const sessionStrategy = job.sessionStrategy || 'fresh';
       const sessionLabel = job.selectedSessionLabel || 'fresh';
+      const jobModel = job.model || '';
       const logId = job.logId || '';
       const logIdDisplay = logId || '未設定';
       const sessionKey = job.sessionKey || '';
@@ -1471,6 +1545,7 @@
         <div class="job-card-meta">
           <div class="job-card-logid" data-field="logId" data-raw="${esc(logId)}" title="クリックで編集">logID: ${esc(logIdDisplay)}</div>
           <div class="job-card-tool" data-field="targetCli" data-raw="${esc(targetCli)}" title="クリックで編集">${esc(targetCli)}</div>
+          <div class="job-card-model" data-field="model" data-raw="${esc(jobModel)}" title="クリックでモデル編集">${esc(jobModel) || '<span style="opacity:.4">model</span>'}</div>
           <div class="job-card-profile" data-field="permissionProfile" data-raw="${esc(permissionProfile)}" title="クリックで編集">${esc(permissionLabel(permissionProfile))}</div>
           <div class="job-card-session" data-field="sessionStrategy" data-raw="${esc(sessionStrategy)}" title="クリックで編集">${esc(sessionLabel)}${recentMark}</div>
         </div>
@@ -1586,13 +1661,19 @@
     const card = el.closest('.job-card');
     const jobName = card.dataset.jobName;
 
-    const cssClasses = { name: 'edit-name', logId: 'edit-logid', cron: 'edit-cron', prompt: 'edit-prompt' };
-    const placeholders = { name: 'ジョブ名', logId: '例: 0001', cron: '例: 0 9 * * *', prompt: 'プロンプトを入力' };
+    const cssClasses = { name: 'edit-name', logId: 'edit-logid', cron: 'edit-cron', prompt: 'edit-prompt', model: 'edit-model' };
+    const placeholders = { name: 'ジョブ名', logId: '例: 0001', cron: '例: 0 9 * * *', prompt: 'プロンプトを入力', model: '例: gemini-2.5-pro' };
     const isPromptField = field === 'prompt';
-    const isSelectField = field === 'targetCli' || field === 'permissionProfile' || field === 'sessionStrategy';
+    const isModelField = field === 'model';
+    const isSelectField = field === 'targetCli' || field === 'permissionProfile' || field === 'sessionStrategy' || isModelField;
     const input = isSelectField ? document.createElement('select') : (isPromptField ? document.createElement('textarea') : document.createElement('input'));
     if (isSelectField) {
       input.className = 'job-edit-select';
+      if (isModelField) {
+        const currentTargetCli = card.querySelector('[data-field="targetCli"]')?.dataset.raw || 'gemini';
+        const modelOpts = getModelOptions(currentTargetCli);
+        input.innerHTML = modelOpts.map(m => `<option value="${esc(m)}"${m === raw ? ' selected' : ''}>${esc(m) || '(デフォルト)'}</option>`).join('');
+      }
       let options = field === 'targetCli'
         ? [
             ['gemini', 'geminiCLI'],
@@ -1608,7 +1689,9 @@
       if (field === 'sessionStrategy') {
         options = [['fresh', 'fresh']];
       }
-      input.innerHTML = options.map(([value, label]) => `<option value="${esc(value)}"${value === raw ? ' selected' : ''}>${esc(label)}</option>`).join('');
+      if (!isModelField) {
+        input.innerHTML = options.map(([value, label]) => `<option value="${esc(value)}"${value === raw ? ' selected' : ''}>${esc(label)}</option>`).join('');
+      }
     } else if (isPromptField) {
       input.rows = 4;
       input.className = 'job-edit-textarea ' + (cssClasses[field] || '');
@@ -1639,7 +1722,8 @@
       input.removeEventListener('blur', onBlur);
       if (isSelectField) input.removeEventListener('change', save);
       const newVal = input.value.trim();
-      if (!newVal || newVal === raw) { cancel(); return; }
+      if (field !== 'model' && (!newVal || newVal === raw)) { cancel(); return; }
+      if (field === 'model' && newVal === raw) { cancel(); return; }
 
       if (field === 'name') {
         const res = await patchJob(jobName, { name: newVal });
@@ -1662,6 +1746,8 @@
         await patchJob(jobName, { cron: newVal });
       } else if (field === 'prompt') {
         await patchJob(jobName, { prompt: newVal });
+      } else if (field === 'model') {
+        await patchJob(jobName, { model: newVal || null });
       } else {
         // Get current full command from API
         const jobs = await fetch('/api/jobs').then(r => r.json());
@@ -1848,6 +1934,7 @@
     setCreateOpen(!createOpen);
   });
   createTargetSelect.addEventListener('change', () => {
+    refreshCreateModelOptions('');
     refreshCreateSessionOptions('fresh');
   });
   createJobBtn.addEventListener('click', createJob);
@@ -1868,6 +1955,7 @@
 
   fetchSettings();
   setCreateOpen(false);
+  refreshCreateModelOptions('');
   fetchJobs();
   setInterval(() => { if (!editing) fetchJobs(); }, 5000);
 

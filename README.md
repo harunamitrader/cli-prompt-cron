@@ -210,7 +210,7 @@ codex exec --sandbox read-only 'タスクの内容'
 # full
 gemini --approval-mode=yolo -p 'タスクの内容'
 claude --permission-mode bypassPermissions -p 'タスクの内容'
-codex exec --full-auto 'タスクの内容'
+codex exec --dangerously-bypass-approvals-and-sandbox 'タスクの内容'
 ```
 
 JSON には上のコマンド文字列を保存しません。`targetCli` と `permissionProfile` と `sessionStrategy` と `prompt` から、`cli-prompt-cron` が実行時に組み立てます。

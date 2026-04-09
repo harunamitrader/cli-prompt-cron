@@ -741,6 +741,8 @@ function handleCreateJob(req, res) {
         }
       }
 
+      const model = typeof payload.model === 'string' && payload.model.trim() ? payload.model.trim() : null;
+
       const job = {
         logId,
         targetCli,
@@ -750,6 +752,7 @@ function handleCreateJob(req, res) {
         cron: cronExpr,
         timezone,
         active: payload.active !== false,
+        ...(model ? { model } : {}),
       };
 
       writeFileSync(filePath, JSON.stringify(job, null, 2) + '\n', 'utf8');
@@ -884,7 +887,7 @@ function handleUpdateJob(req, res, jobName) {
       if (body) {
         // Body present → update specified fields
         const updates = JSON.parse(body);
-        const allowed = ['logId', 'targetCli', 'permissionProfile', 'sessionStrategy', 'prompt', 'cron', 'timezone', 'active'];
+        const allowed = ['logId', 'targetCli', 'permissionProfile', 'sessionStrategy', 'prompt', 'cron', 'timezone', 'active', 'model'];
         for (const key of allowed) {
           if (key in updates) job[key] = updates[key];
         }

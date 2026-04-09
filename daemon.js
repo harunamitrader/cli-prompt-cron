@@ -348,11 +348,12 @@ function listGeminiSessionIdsSync(workdir) {
   }
 }
 
-function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy = 'fresh', sessionRecord = null) {
+function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy = 'fresh', sessionRecord = null, model = null) {
   const target = normalizeTargetCli(targetCli) || 'gemini';
   const profile = normalizePermissionProfile(permissionProfile) || 'safe';
   const strategy = parseSessionStrategy(sessionStrategy);
   const quotedPrompt = `'${escapeSingleQuotedPrompt(prompt)}'`;
+  const modelFlag = model ? ` -m ${model}` : '';
 
   if (target === 'gemini') {
     const flagsByProfile = {
@@ -362,7 +363,7 @@ function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy = 'f
       full: '--approval-mode=yolo',
     };
     const flags = flagsByProfile[profile];
-    const baseFlags = flags ? ` ${flags}` : '';
+    const baseFlags = `${modelFlag}${flags ? ' ' + flags : ''}`;
     if (strategy.mode === 'selected' && strategy.sessionId) {
       return {
         command: `gemini${baseFlags} --resume ${strategy.sessionId} -p ${quotedPrompt}`,
@@ -377,7 +378,7 @@ function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy = 'f
   if (target === 'claude') {
     if (strategy.mode === 'selected') {
       return {
-        command: `claude --permission-mode ${profile === 'edit' ? 'acceptEdits' : profile === 'plan' ? 'plan' : profile === 'full' ? 'bypassPermissions' : 'default'} -p ${quotedPrompt}`,
+        command: `claude${modelFlag} --permission-mode ${profile === 'edit' ? 'acceptEdits' : profile === 'plan' ? 'plan' : profile === 'full' ? 'bypassPermissions' : 'default'} -p ${quotedPrompt}`,
         sessionEffectiveStrategy: 'fresh',
         sessionWarning: 'selected session is not supported for Claude Code yet; falling back to fresh',
         selectedSessionId: strategy.sessionId,
@@ -389,26 +390,26 @@ function buildCommand(targetCli, permissionProfile, prompt, sessionStrategy = 'f
       plan: 'plan',
       full: 'bypassPermissions',
     };
-    return { command: `claude --permission-mode ${modeByProfile[profile]} -p ${quotedPrompt}`, sessionEffectiveStrategy: 'fresh', sessionWarning: null, selectedSessionId: null };
+    return { command: `claude${modelFlag} --permission-mode ${modeByProfile[profile]} -p ${quotedPrompt}`, sessionEffectiveStrategy: 'fresh', sessionWarning: null, selectedSessionId: null };
   }
 
   const codexFlagsByProfile = {
     safe: '--sandbox read-only',
     edit: '--sandbox workspace-write',
     plan: '--sandbox read-only',
-    full: '--full-auto',
+    full: '--dangerously-bypass-approvals-and-sandbox',
   };
   if (strategy.mode === 'selected' && strategy.sessionId) {
-    const resumeFlags = profile === 'full' ? ' --full-auto' : '';
+    const resumeFlags = profile === 'full' ? ' --dangerously-bypass-approvals-and-sandbox' : '';
     return {
-      command: `codex exec resume ${strategy.sessionId}${resumeFlags} ${quotedPrompt}`,
+      command: `codex exec${modelFlag} resume ${strategy.sessionId}${resumeFlags} ${quotedPrompt}`,
       sessionEffectiveStrategy: `session:${strategy.sessionId}`,
       sessionWarning: null,
       selectedSessionId: strategy.sessionId,
     };
   }
   return {
-    command: `codex exec ${codexFlagsByProfile[profile]} ${quotedPrompt}`,
+    command: `codex exec${modelFlag} ${codexFlagsByProfile[profile]} ${quotedPrompt}`,
     sessionEffectiveStrategy: 'fresh',
     sessionWarning: null,
     selectedSessionId: null,
@@ -687,7 +688,8 @@ function parseJob(filePath) {
 
   const name = jobName;
   const sessionKey = makeSessionKey(name, logId);
-  const commandInfo = buildCommand(targetCli, permissionProfile, prompt, sessionStrategy, sessionRecord);
+  const model = typeof job.model === 'string' && job.model.trim() ? job.model.trim() : null;
+  const commandInfo = buildCommand(targetCli, permissionProfile, prompt, sessionStrategy, sessionRecord, model);
 
   return {
     name,
@@ -697,6 +699,7 @@ function parseJob(filePath) {
     sessionStrategy,
     sessionKey,
     prompt,
+    model: model || null,
     cron:     job.cron.trim(),
     command:  commandInfo.command,
     sessionEffectiveStrategy: commandInfo.sessionEffectiveStrategy,
