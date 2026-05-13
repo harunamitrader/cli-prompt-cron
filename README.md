@@ -6,7 +6,10 @@ AI CLI 向けの cron デーモン + ブラウザダッシュボード。
 Gemini CLI・Codex など、スケジュール実行機能を持たない AI CLI にプロンプトの定期実行を追加します。
 Claude Code でも利用可能です。
 
+![CLI Prompt Cron 概要図](assets/cli-prompt-cron.png)
+
 ---
+
 
 ## 概要
 
